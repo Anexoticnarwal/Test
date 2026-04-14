@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Deep Food Facts</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --bg: #f3f4f6;
+            --card-bg: #ffffff;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background-color: var(--bg); color: var(--primary); }
+        .container { max-width: 600px; margin: 0 auto; }
+        
+        /* Card Styles */
+        .card { background: var(--card-bg); border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 20px; }
+        .header { padding: 20px; text-align: center; background: #fafafa; border-bottom: 1px solid #eee; }
+        .header h1 { margin: 0; font-size: 1.5rem; }
+        .header p { margin: 5px 0 0; color: #7f8c8d; font-size: 0.9rem; }
+        
+        /* Image */
+        .img-container { width: 100%; height: 250px; background: #eee; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .img-container img { width: 100%; height: 100%; object-fit: contain; padding: 10px; }
+        
+        /* Scores Grid */
+        .scores { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 20px; border-bottom: 1px solid #eee; }
+        .score-box { text-align: center; padding: 10px; border-radius: 8px; background: #f8f9fa; }
+        .score-box strong { display: block; font-size: 1.2rem; margin-bottom: 4px; }
+        .score-box span { font-size: 0.75rem; text-transform: uppercase; color: #7f8c8d; letter-spacing: 1px; }
+        
+        /* Grades Color Coding */
+        .grade-a { color: #2ecc71; } .grade-b { color: #85c440; } .grade-c { color: #f1c40f; }
+        .grade-d { color: #e67e22; } .grade-e { color: #e74c3c; } .grade-unknown { color: #95a5a6; }
+
+        /* Data Lists */
+        .details { padding: 20px; }
+        .detail-row { margin-bottom: 15px; }
+        .detail-title { font-weight: 600; font-size: 0.9rem; color: #34495e; display: block; margin-bottom: 4px; }
+        .detail-content { font-size: 0.95rem; line-height: 1.5; color: #555; }
+        .tag { display: inline-block; background: #e1f5fe; color: #0288d1; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; margin: 2px; }
+        .tag.alert { background: #ffebee; color: #c62828; }
+
+        /* Button */
+        .controls { position: sticky; bottom: 20px; text-align: center; }
+        button { background-color: var(--primary); color: white; border: none; padding: 16px 32px; border-radius: 50px; font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 15px rgba(44, 62, 80, 0.3); transition: transform 0.1s; width: 90%; max-width: 400px; }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.7; cursor: wait; }
+
+        /* Debug/Error */
+        #status { margin-top: 10px; font-size: 0.85rem; color: #7f8c8d; text-align: center; min-height: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <div class="img-container">
+            <img id="product-img" src="https://placehold.co" alt="Product Image">
+        </div>
+        
+        <div class="header">
+            <h1 id="product-name">Unknown Product</h1>
+            <p id="product-brand">Tap the button below to start</p>
+        </div>
+
+        <!-- HEALTH SCORES -->
+        <div class="scores">
+            <div class="score-box">
+                <strong id="score-nutri" class="grade-unknown">?</strong>
+                <span>Nutri-Score</span>
+            </div>
+            <div class="score-box">
+                <strong id="score-nova" class="grade-unknown">?</strong>
+                <span>NOVA Group</span>
+            </div>
+            <div class="score-box">
+                <strong id="score-eco" class="grade-unknown">?</strong>
+                <span>Eco-Score</span>
+            </div>
+        </div>
+
+        <!-- DEEP DATA -->
+        <div class="details">
+            <div class="detail-row">
+                <span class="detail-title">🌍 Origins & Manufacturing</span>
+                <div id="origins" class="detail-content">N/A</div>
+            </div>
+            
+            <div class="detail-row">
+                <span class="detail-title">⚠️ Allergens</span>
+                <div id="allergens" class="detail-content">None listed</div>
+            </div>
+
+            <div class="detail-row">
+                <span class="detail-title">🧪 Additives & Chemicals</span>
+                <div id="additives" class="detail-content">None listed</div>
+            </div>
+
+            <div class="detail-row">
+                <span class="detail-title">💊 Vitamins & Minerals (per 100g)</span>
+                <div id="vitamins" class="detail-content">No data available</div>
+            </div>
+
+            <div class="detail-row">
+                <span class="detail-title">📦 Packaging</span>
+                <div id="packaging" class="detail-content">N/A</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="scan-btn">🎲 Fetch Random Product</button>
+        <div id="status">Waiting for input...</div>
+    </div>
+</div>
+
+<script>
+    const btn = document.getElementById('scan-btn');
+    const statusMsg = document.getElementById('status');
+
+    // Helper to simplify checking for missing data
+    const safeGet = (val, fallback = 'N/A') => (val && val.trim() !== '') ? val : fallback;
+
+    async function fetchProduct() {
+        // UI Updates
+        btn.disabled = true;
+        statusMsg.innerText = "🛰️ Connecting to Open Food Facts database...";
+        document.body.style.cursor = "wait";
+
+        try {
+            // We fetch from the top 3000 most popular products to ensure we get one with GOOD data.
+            // Randomly hitting page 500,000 usually returns empty junk products.
+            const randomPage = Math.floor(Math.random() * 1000) + 1;
+            
+            // Added 'fields' parameter to make the request lighter and faster
+            const fields = "product_name,brands,image_front_url,nutriscore_grade,nova_group,ecoscore_grade,origins,manufacturing_places,allergens_tags,additives_tags,packaging,nutriments";
+            const url = `https://openfoodfacts.org{randomPage}&fields=${fields}&json=true`;
+
+            const response = await fetch(url);
+            
+            if (!response.ok) throw new Error(`API Error: ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (!data.products || data.products.length === 0) {
+                throw new Error("No products found on this page. Try again!");
+            }
+
+            const product = data.products[0];
+            updateUI(product);
+            statusMsg.innerText = "✅ Data loaded successfully!";
+
+        } catch (error) {
+            console.error(error);
+            statusMsg.innerText = "❌ Error: " + error.message;
+        } finally {
+            btn.disabled = false;
+            document.body.style.cursor = "default";
+        }
+    }
+
+    function updateUI(p) {
+        // 1. Basic Info
+        document.getElementById('product-name').innerText = p.product_name || "Unnamed Product";
+        document.getElementById('product-brand').innerText = p.brands || "Unknown Brand";
+        document.getElementById('product-img').src = p.image_front_url || "https://placehold.co";
+
+        // 2. Scores (Helper function to set grade color)
+        setScore('score-nutri', (p.nutriscore_grade || '?').toUpperCase());
+        setScore('score-nova', p.nova_group || '?');
+        setScore('score-eco', (p.ecoscore_grade || '?').toUpperCase());
+
+        // 3. Text Data
+        document.getElementById('origins').innerText = 
+            `${safeGet(p.origins, 'Origin unknown')} (Made in: ${safeGet(p.manufacturing_places, 'Unknown location')})`;
+        
+        document.getElementById('packaging').innerText = safeGet(p.packaging);
+
+        // 4. Arrays (Tags)
+        renderTags('allergens', p.allergens_tags, true); // True for 'alert' red style
+        renderTags('additives', p.additives_tags, false);
+
+        // 5. Vitamins (Extract specific keys from nutriments object)
+        const n = p.nutriments || {};
+        const vits = [];
+        if (n['vitamin-c_100g']) vits.push(`Vitamin C: ${n['vitamin-c_100g']}g`);
+        if (n['calcium_100g']) vits.push(`Calcium: ${n['calcium_100g']}g`);
+        if (n['iron_100g']) vits.push(`Iron: ${n['iron_100g']}g`);
+        if (n['fiber_100g']) vits.push(`Fiber: ${n['fiber_100g']}g`);
+        
+        document.getElementById('vitamins').innerHTML = vits.length > 0 
+            ? vits.map(v => `<span class="tag">${v}</span>`).join('') 
+            : "No vitamin data listed on package.";
+    }
+
+    function setScore(id, value) {
+        const el = document.getElementById(id);
+        el.innerText = value;
+        // Reset classes
+        el.className = '';
+        
+        // Assign color class based on value
+        if (['A', '1'].includes(value)) el.classList.add('grade-a');
+        else if (['B', '2'].includes(value)) el.classList.add('grade-b');
+        else if (['C', '3'].includes(value)) el.classList.add('grade-c');
+        else if (['D', '4'].includes(value)) el.classList.add('grade-d');
+        else if (['E'].includes(value)) el.classList.add('grade-e');
+        else el.classList.add('grade-unknown');
+    }
+
+    function renderTags(id, tags, isAlert) {
+        const el = document.getElementById(id);
+        if (!tags || tags.length === 0) {
+            el.innerText = "None listed";
+            return;
+        }
+        // Clean up tags (remove 'en:' prefix)
+        const cleanTags = tags.map(t => t.replace(/en:|fr:/g, '').replace(/-/g, ' '));
+        el.innerHTML = cleanTags.map(t => `<span class="tag ${isAlert ? 'alert' : ''}">${t}</span>`).join('');
+    }
+
+    // Attach Event Listener
+    btn.addEventListener('click', fetchProduct);
+
+</script>
+</body>
+</html>

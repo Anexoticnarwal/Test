@@ -1,123 +1,172 @@
-:root {
-    --primary: #6200ea;
-    --accent: #00e676;
-    --white-key: #fff;
-    --black-key: #333;
+// --- CONFIGURATION ---
+// REQUIRED: Points to the model files hosted online to fix "Loading" freeze
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/ml5js/ml5-data-and-models/models/pitch-detection/crepe/';
+const PIANO_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const START_OCTAVE = 2; 
+const END_OCTAVE = 6;
+
+// --- STATE ---
+let audioContext;
+let pitch;
+let stream;
+let isListening = false;
+let notesHistory = []; // Stores all detected notes
+let lastNote = null;
+let noteHoldFrames = 0; // Debounce counter
+
+// --- VEXFLOW SETUP ---
+const { Renderer, Stave, StaveNote, Voice, Formatter } = Vex.Flow;
+const notDiv = document.getElementById('notation');
+const wrapper = document.getElementById('scroll-wrapper');
+
+// --- INITIALIZATION ---
+document.getElementById('startBtn').addEventListener('click', startApp);
+document.getElementById('clearBtn').addEventListener('click', clearMusic);
+generatePiano();
+renderSheetMusic(); // Draw empty stave initially
+
+async function startApp() {
+    const btn = document.getElementById('startBtn');
+    const status = document.getElementById('status');
+    
+    if (isListening) return;
+
+    try {
+        status.innerText = "Requesting Mic Access...";
+        
+        // 1. Create AudioContext strictly inside User Gesture
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        await audioContext.resume(); // Crucial for mobile browsers
+        
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        
+        status.innerText = "Loading AI Model...";
+        
+        // 2. Initialize ML5 with Online Model URL
+        pitch = ml5.pitchDetection(MODEL_URL, audioContext, stream, () => {
+            status.innerText = "Listening! Play a note.";
+            btn.style.display = 'none';
+            isListening = true;
+            loop();
+        });
+
+    } catch (err) {
+        console.error(err);
+        status.innerText = "Error: " + err.message;
+        alert("Microphone access denied or not supported.");
+    }
 }
 
-body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f5f5f5;
-    display: flex;
-    justify-content: center;
-    height: 100vh;
-    overflow: hidden;
+function loop() {
+    if (!isListening) return;
+    pitch.getPitch((err, frequency) => {
+        if (frequency) {
+            const note = frequencyToNote(frequency);
+            // Simple Debounce: Note must be held for 3 frames to register
+            if (note === lastNote) {
+                noteHoldFrames++;
+            } else {
+                noteHoldFrames = 0;
+            }
+
+            if (noteHoldFrames > 2 && note !== notesHistory[notesHistory.length - 1]) {
+                handleNewNote(note);
+                noteHoldFrames = 0; // Reset to prevent spam
+            }
+            lastNote = note;
+        }
+        requestAnimationFrame(loop); // Smoother than recursive function
+    });
 }
 
-.app-container {
-    width: 100%;
-    max-width: 600px;
-    display: flex;
-    flex-direction: column;
-    background: white;
-    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+function handleNewNote(note) {
+    // 1. Add to History
+    notesHistory.push(note);
+    
+    // 2. Update UI
+    updatePiano(note);
+    renderSheetMusic();
+    
+    // 3. Auto Scroll
+    wrapper.scrollLeft = wrapper.scrollWidth;
 }
 
-header {
-    padding: 20px;
-    text-align: center;
-    background: var(--primary);
-    color: white;
+function renderSheetMusic() {
+    notDiv.innerHTML = ''; // Clear SVG
+    
+    // Calculate required width (Min 350px, adds 50px per note)
+    const requiredWidth = Math.max(350, notesHistory.length * 60 + 50);
+    
+    const renderer = new Renderer(notDiv, Renderer.Backends.SVG);
+    renderer.resize(requiredWidth, 150);
+    const context = renderer.getContext();
+    
+    // Create Stave of dynamic width
+    const stave = new Stave(10, 40, requiredWidth - 20);
+    stave.addClef("treble").addTimeSignature("4/4");
+    stave.setContext(context).draw();
+
+    if (notesHistory.length === 0) return;
+
+    // Convert Note Strings (C4) to VexFlow Objects
+    const notes = notesHistory.map(n => {
+        const parts = n.match(/([A-G]#?)(\d)/);
+        if(!parts) return null;
+        
+        const key = parts[1].toLowerCase();
+        const octave = parts[2];
+        const vfNote = new StaveNote({ keys: [`${key}/${octave}`], duration: "q" });
+        
+        if (parts[1].includes('#')) {
+            vfNote.addModifier(new Vex.Flow.Accidental("#"));
+        }
+        return vfNote;
+    }).filter(n => n !== null);
+
+    // Render Voice
+    const voice = new Voice({ num_beats: notes.length, beat_value: 4 });
+    voice.addTickables(notes);
+    
+    new Formatter().joinVoices([voice]).format([voice], requiredWidth - 50);
+    voice.draw(context, stave);
 }
 
-button {
-    padding: 10px 20px;
-    border: none;
-    background: var(--accent);
-    color: #000;
-    font-weight: bold;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 1rem;
-    margin-top: 10px;
+function updatePiano(note) {
+    document.getElementById('note-display').innerText = note;
+    document.querySelectorAll('.key').forEach(k => k.classList.remove('active'));
+    
+    const key = document.querySelector(`.key[data-note="${note}"]`);
+    if (key) {
+        key.classList.add('active');
+        key.scrollIntoView({ behavior: "smooth", inline: "center" });
+        
+        // Finger Logic
+        const base = note.slice(0, -1);
+        const fingers = { 'C':1, 'D':2, 'E':3, 'F':1, 'G':2, 'A':3, 'B':4 };
+        document.getElementById('finger-display').innerText = fingers[base] || 2;
+    }
 }
 
-#status {
-    font-size: 0.8rem;
-    margin-top: 5px;
-    opacity: 0.8;
+function generatePiano() {
+    const piano = document.getElementById('piano');
+    for (let o = START_OCTAVE; o <= END_OCTAVE; o++) {
+        PIANO_KEYS.forEach(n => {
+            const div = document.createElement('div');
+            div.className = `key ${n.includes('#') ? 'black' : 'white'}`;
+            div.dataset.note = `${n}${o}`;
+            piano.appendChild(div);
+        });
+    }
 }
 
-#sheet-music-container {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-bottom: 1px solid #eee;
+function clearMusic() {
+    notesHistory = [];
+    renderSheetMusic();
 }
 
-.finger-guide {
-    padding: 15px;
-    text-align: center;
-    font-size: 1.2rem;
-    background: #fafafa;
-}
-
-.finger-badge {
-    display: inline-block;
-    background: var(--primary);
-    color: white;
-    width: 40px;
-    height: 40px;
-    line-height: 40px;
-    border-radius: 50%;
-    margin-left: 10px;
-    font-weight: bold;
-}
-
-/* Piano Styling */
-.piano-container {
-    height: 200px;
-    overflow-x: auto; /* Scrollable on mobile */
-    background: #222;
-    border-top: 5px solid #111;
-}
-
-.piano {
-    display: flex;
-    height: 100%;
-    padding: 0 20px;
-    position: relative;
-    width: max-content; /* Allows scrolling */
-}
-
-.key {
-    width: 40px;
-    height: 100%;
-    background: var(--white-key);
-    border: 1px solid #ccc;
-    border-radius: 0 0 5px 5px;
-    position: relative;
-    z-index: 1;
-    box-sizing: border-box;
-}
-
-.key.black {
-    width: 30px;
-    height: 60%;
-    background: var(--black-key);
-    margin-left: -15px;
-    margin-right: -15px;
-    z-index: 2;
-    border: 1px solid #000;
-}
-
-/* Active States */
-.key.active {
-    background: var(--accent) !important;
-    transform: scaleY(0.98);
-    transform-origin: top;
-    box-shadow: 0 0 10px var(--accent);
+function frequencyToNote(freq) {
+    const noteNum = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
+    const rounded = Math.round(noteNum);
+    const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    return `${noteNames[rounded % 12]}${Math.floor(rounded / 12) - 1}`;
 }

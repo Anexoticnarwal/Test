@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Melody Scribe</title>
     <link rel="stylesheet" href="style.css">
     <!-- Libraries -->
@@ -13,20 +13,29 @@
 
     <div class="app-container">
         <header>
-            <h1>Melody Scribe</h1>
-            <button id="startBtn">Start Listening</button>
-            <div id="status">Tap Start to enable Mic</div>
+            <div class="header-top">
+                <h1>Melody Scribe</h1>
+                <button id="clearBtn" class="secondary-btn">Clear</button>
+            </div>
+            <button id="startBtn">Tap to Start Listening</button>
+            <div id="status">Waiting for input...</div>
         </header>
 
-        <!-- Sheet Music Canvas -->
-        <div id="sheet-music-container">
+        <!-- Sheet Music (Scrollable) -->
+        <div id="scroll-wrapper">
             <div id="notation"></div>
         </div>
 
         <!-- Finger Guide -->
         <div class="finger-guide">
-            <span>Suggested Finger:</span>
-            <span id="finger-display" class="finger-badge">-</span>
+            <div class="finger-box">
+                <span class="label">FINGER</span>
+                <span id="finger-display" class="big-num">-</span>
+            </div>
+            <div class="finger-box">
+                <span class="label">NOTE</span>
+                <span id="note-display" class="big-num">-</span>
+            </div>
         </div>
 
         <!-- Piano Visualizer -->
